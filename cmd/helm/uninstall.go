@@ -68,6 +68,7 @@ func newUninstallCmd(cfg *action.Configuration, out io.Writer) *cobra.Command {
 	f.BoolVar(&client.DryRun, "dry-run", false, "simulate a uninstall")
 	f.BoolVar(&client.DisableHooks, "no-hooks", false, "prevent hooks from running during uninstallation")
 	f.BoolVar(&client.KeepHistory, "keep-history", false, "remove all associated resources and mark the release as deleted, but retain the release history")
+	f.BoolVar(&client.Wait, "wait", false, "remove the minor resources only after the prior resources stopped or deleted")
 	f.DurationVar(&client.Timeout, "timeout", 300*time.Second, "time to wait for any individual Kubernetes operation (like Jobs for hooks)")
 	f.StringVar(&client.Description, "description", "", "add a custom description")
 

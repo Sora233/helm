@@ -43,6 +43,9 @@ type Interface interface {
 	// error.
 	WatchUntilReady(resources ResourceList, timeout time.Duration) error
 
+	// WatchUntilRemove watch the resource in reader untils it doesn't exists.
+	WatchUntilRemove(resources ResourceList, timeout time.Duration) error
+
 	// Update updates one or more resources or creates the resource
 	// if it doesn't exist.
 	Update(original, target ResourceList, force bool) (*Result, error)

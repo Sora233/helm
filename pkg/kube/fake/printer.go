@@ -91,6 +91,11 @@ func (p *PrintingKubeClient) WaitAndGetCompletedPodPhase(_ string, _ time.Durati
 	return v1.PodSucceeded, nil
 }
 
+func (p *PrintingKubeClient) WatchUntilRemove(resources kube.ResourceList, timeout time.Duration) error {
+	_, err := io.Copy(p.Out, bufferize(resources))
+	return err
+}
+
 func bufferize(resources kube.ResourceList) io.Reader {
 	var builder strings.Builder
 	for _, info := range resources {

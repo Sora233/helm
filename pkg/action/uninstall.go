@@ -36,6 +36,7 @@ type Uninstall struct {
 	DisableHooks bool
 	DryRun       bool
 	KeepHistory  bool
+	Wait         bool
 	Timeout      time.Duration
 	Description  string
 }
@@ -191,14 +192,47 @@ func (u *Uninstall) deleteRelease(rel *release.Release) (string, []error) {
 	}
 
 	var builder strings.Builder
-	for _, file := range filesToDelete {
-		builder.WriteString("\n---\n" + file.Content)
-	}
-	resources, err := u.cfg.KubeClient.Build(strings.NewReader(builder.String()), false)
-	if err != nil {
-		return "", []error{errors.Wrap(err, "unable to build kubernetes objects for delete")}
-	}
+	var errs []error = make([]error, 0)
 
-	_, errs := u.cfg.KubeClient.Delete(resources)
+	if u.Wait {
+		var lastKind string
+		for index, file := range filesToDelete {
+			// find all manifest with the same kind and then delete
+			if lastKind == "" || lastKind == file.Head.Kind {
+				builder.WriteString("\n---\n" + file.Content)
+				lastKind = file.Head.Kind
+				// if then file is the last one, then do delete
+				if index+1 != len(filesToDelete) {
+					continue
+				}
+			}
+			// find manifest with another kind or no more manifest, delete the manifest in the builder
+			resources, err := u.cfg.KubeClient.Build(strings.NewReader(builder.String()), false)
+			u.cfg.Log(builder.String())
+			if err != nil {
+				return "", []error{errors.Wrap(err, "unable to build kubernetes objects for delete")}
+			}
+			_, e := u.cfg.KubeClient.Delete(resources)
+			errs = append(errs, e...)
+			if err := u.cfg.KubeClient.WatchUntilRemove(resources, u.Timeout); err != nil {
+				return "", []error{errors.Wrap(err, "delete resource timeout kind: "+lastKind)}
+			}
+			// if there are more manifests then reset the builder
+			if index+1 != len(filesToDelete) {
+				builder.Reset()
+				builder.WriteString("\n---\n" + file.Content)
+				lastKind = file.Head.Kind
+			}
+		}
+	} else {
+		for _, file := range filesToDelete {
+			builder.WriteString("\n---\n" + file.Content)
+		}
+		resources, err := u.cfg.KubeClient.Build(strings.NewReader(builder.String()), false)
+		if err != nil {
+			return "", []error{errors.Wrap(err, "unable to build kubernetes objects for delete")}
+		}
+		_, errs = u.cfg.KubeClient.Delete(resources)
+	}
 	return kept, errs
 }

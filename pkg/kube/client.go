@@ -557,3 +557,44 @@ func (c *Client) WaitAndGetCompletedPodPhase(name string, timeout time.Duration)
 
 	return v1.PodUnknown, err
 }
+
+// WatchUntilRemove watch the resources and wait until they're deleted
+func (c *Client) WatchUntilRemove(resources ResourceList, timeout time.Duration) error {
+	return perform(resources, c.watchUntilRemove(timeout))
+}
+
+func (c *Client) watchUntilRemove(timeout time.Duration) func(info *resource.Info) error {
+	return func(info *resource.Info) error {
+		kind := info.Mapping.GroupVersionKind.Kind
+		c.Log("Watching for changes to %s %s with timeout of %v", kind, info.Name, timeout)
+
+		// Use a selector on the name of the resource. This should be unique for the
+		// given version and kind
+		selector, err := fields.ParseSelector(fmt.Sprintf("metadata.name=%s", info.Name))
+		if err != nil {
+			return err
+		}
+		lw := cachetools.NewListWatchFromClient(info.Client, info.Mapping.Resource.Resource, info.Namespace, selector)
+
+		// watch until Deleted event
+		ctx, cancel := watchtools.ContextWithOptionalTimeout(context.Background(), timeout)
+		defer cancel()
+		_, err = watchtools.ListWatchUntil(ctx, lw, func(e watch.Event) (bool, error) {
+			// Make sure the incoming object is versioned as we use unstructured
+			// objects when we build manifests
+			switch e.Type {
+			case watch.Deleted:
+				c.Log("Deleted event for %s", info.Name)
+				return true, nil
+			default:
+				// Only pod and job need time to delete
+				if kind == "Pod" || kind == "Job" {
+					c.Log("event %s for %s", e.Type, info.Name)
+					return false, nil
+				}
+				return true, nil
+			}
+		})
+		return err
+	}
+}
