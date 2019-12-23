@@ -568,6 +568,11 @@ func (c *Client) watchUntilRemove(timeout time.Duration) func(info *resource.Inf
 		kind := info.Mapping.GroupVersionKind.Kind
 		c.Log("Watching for changes to %s %s with timeout of %v", kind, info.Name, timeout)
 
+		// Only pod and job need time to stop gracefully
+		if kind != "Pod" && kind != "Job" {
+			return nil
+		}
+
 		// Use a selector on the name of the resource. This should be unique for the
 		// given version and kind
 		selector, err := fields.ParseSelector(fmt.Sprintf("metadata.name=%s", info.Name))
@@ -587,12 +592,8 @@ func (c *Client) watchUntilRemove(timeout time.Duration) func(info *resource.Inf
 				c.Log("Deleted event for %s", info.Name)
 				return true, nil
 			default:
-				// Only pod and job need time to delete
-				if kind == "Pod" || kind == "Job" {
-					c.Log("event %s for %s", e.Type, info.Name)
-					return false, nil
-				}
-				return true, nil
+				c.Log("event %s for %s", e.Type, info.Name)
+				return false, nil
 			}
 		})
 		return err
